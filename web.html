@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Globe</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #000;
+            color: #fff;
+            display: flex;
+            flex-direction: row;
+        }
+        #sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 250px;
+            height: 100%;
+            background: #333;
+            overflow-y: auto;
+            padding-top: 20px;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+        #toggleHistoryButton {
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            font-size: 16px;
+            color: #000;
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1001;
+        }
+        #sidebar h2 {
+            text-align: center;
+            color: #fff;
+        }
+        .history-item {
+            background: #444;
+            padding: 15px 10px;
+            margin: 5px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            color: #fff;
+            text-align: center;
+            width: calc(100% - 20px);
+            margin-left: 10px;
+            margin-right: 10px;
+        }
+        .history-item:hover {
+            background: #555;
+        }
+        #mainContent {
+            margin-left: 250px;
+            width: calc(100% - 250px);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        #globeViz {
+            position: relative;
+            width: 100%;
+            height: calc(100% - 80px);
+            z-index: 1;
+        }
+        #overlay {
+            position: relative;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            margin: 20px auto;
+            z-index: 1000;
+        }
+        #overlay h1 {
+            margin: 0 0 10px 0;
+            font-size: 24px;
+            color: #000;
+        }
+        #overlay input, #overlay button {
+            margin: 5px 0;
+            padding: 10px;
+            font-size: 16px;
+            color: #000;
+        }
+        #fullscreenImageContainer {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1002;
+            flex-direction: column;
+        }
+        #fullscreenImageContainer img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+        #closeFullscreenButton {
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            padding: 10px;
+            border-radius: 50%;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .navigation-buttons {
+            display: flex;
+            justify-content: space-between;
+            width: 90%;
+            margin: 20px;
+        }
+        .nav-button {
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            font-size: 16px;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h2>History</h2>
+        <div id="history-section"></div>
+    </div>
+    <button id="toggleHistoryButton">History</button>
+    <div id="mainContent">
+        <div id="overlay">
+            <h1 id="location-title">Enter a Location</h1>
+            <input type="text" id="location-input" placeholder="Search location...">
+            <label for="year">Select Year:</label>
+            <input type="number" id="year" name="year" min="2000" max="2024" value="2024">
+            <button id="show-images-button">Show Images</button>
+        </div>
+        <div id="globeViz"></div>
+    </div>
+    <div id="fullscreenImageContainer">
+        <img id="fullscreenImage" src="" alt="Fullscreen Image">
+        <button id="closeFullscreenButton">×</button>
+        <div class="navigation-buttons">
+            <button id="prev-season-button" class="nav-button">&lt;Winter</button>
+            <button id="next-season-button" class="nav-button">Summer&gt;</button>
+        </div>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Globe.gl -->
+    <script src="https://unpkg.com/globe.gl"></script>
+    <!-- Custom JS -->
+    <script>
+        const Globe = window.Globe;
+        const globeElement = document.getElementById('globeViz');
+        const sidebar = document.getElementById('sidebar');
+        const fullscreenImageContainer = document.getElementById('fullscreenImageContainer');
+        const fullscreenImage = document.getElementById('fullscreenImage');
+        const closeFullscreenButton = document.getElementById('closeFullscreenButton');
+        const showImagesButton = document.getElementById('show-images-button');
+        const locationInput = document.getElementById('location-input');
+        const yearInput = document.getElementById('year');
+        const historySection = document.getElementById('history-section');
+        const prevSeasonButton = document.getElementById('prev-season-button');
+        const nextSeasonButton = document.getElementById('next-season-button');
+        const toggleHistoryButton = document.getElementById('toggleHistoryButton');
+
+        const seasonsOrder = ['Winter', 'Spring', 'Summer', 'Autumn'];
+        let currentSeasonIndex = 1; // Start with Spring
+        let imagesData = null;
+        let currentLocation = '';
+        let markers = [];
+
+        // Create the globe
+        const world = Globe()(globeElement)
+            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+            .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+            .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+            .width(window.innerWidth)
+            .height(window.innerHeight)
+            .pointOfView({ altitude: 2 }, 4000)
+            .onGlobeClick(handleGlobeClick);
+
+        // Adjust globe size on window resize
+        window.addEventListener('resize', () => {
+            world.width(window.innerWidth);
+            world.height(window.innerHeight);
+        });
+
+        // Handle button click to fetch images
+        showImagesButton.addEventListener('click', () => {
+            const location = locationInput.value;
+            const year = yearInput.value;
+            if (location) {
+                getCoordinates(location, year);
+            } else {
+                console.error('Location input is empty');
+            }
+        });
+
+        function getCoordinates(location, year) {
+            fetch(`https://nominatim.openstreetmap.org/search?q=${location}&format=json&limit=1`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        const coords = data[0];
+                        const lat = coords.lat;
+                        const lon = coords.lon;
+                        currentLocation = location;
+                        pointToLocation(lat, lon);
+                        fetchImagesForSeasons(location, year, lat, lon);
+                    } else {
+                        console.error('No results found');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching coordinates:', error);
+                });
+        }
+
+        function pointToLocation(lat, lng) {
+            const marker = {
+                lat: parseFloat(lat),
+                lng: parseFloat(lng),
+                size: 0.5,
+                color: 'red'
+            };
+            markers.push(marker);
+            world.pointsData(markers);
+            world.pointAltitude('size');
+            world.pointColor('color');
+            world.pointOfView({ lat: parseFloat(lat), lng: parseFloat(lng), altitude: 0.5 }, 2000);
+        }
+
+        async function fetchImagesForSeasons(locationName, year, lat, lng) {
+            try {
+                console.log(`Fetching images for ${locationName} (${year})`);
+                const response = await fetch('http://127.0.0.1:5000/fetch_images', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ locationName, year })
+                });
+                if (!response.ok) {
+                    throw new Error(`Network response was not ok: ${response.statusText}`);
+                }
+                const data = await response.json();
+                console.log('Images data received:', data); // Debugging
+                imagesData = data;
+                saveHistory(locationName, year, lat, lng);
+                updateHistory();
+                showFullscreenImage(lat, lng);
+            } catch (error) {
+                console.error('Error fetching images:', error.message);
+            }
+        }
+
+        function saveHistory(locationName, year, lat, lng) {
+            const historyItem = {
+                locationName,
+                year,
+                lat,
+                lng,
+                date: new Date()
+            };
+            let history = JSON.parse(localStorage.getItem('imageHistory')) || [];
+            const isDuplicate = history.some(item => 
+                item.locationName === locationName && item.year === year
+            );
+            if (!isDuplicate) {
+                history.push(historyItem);
+                localStorage.setItem('imageHistory', JSON.stringify(history));
+            }
+        }
+
+        function updateHistory() {
+            historySection.innerHTML = '';
+            const history = JSON.parse(localStorage.getItem('imageHistory')) || [];
+            history.forEach((item, index) => {
+                const button = document.createElement('button');
+                button.className = 'history-item';
+                button.textContent = `${item.locationName} (${item.year})`;
+                button.addEventListener('click', () => {
+                    loadImagesForHistory(item);
+                });
+                historySection.appendChild(button);
+
+                const marker = {
+                    lat: parseFloat(item.lat),
+                    lng: parseFloat(item.lng),
+                    size: 0.5,
+                    color: 'grey'
+                };
+                markers.push(marker);
+            });
+            world.pointsData(markers);
+        }
+
+        function loadImagesForHistory(item) {
+            imagesData = null; // Reset the imagesData
+            currentLocation = item.locationName;
+            fetchImagesForSeasons(item.locationName, item.year, item.lat, item.lng);
+            showFullscreenImage(item.lat, item.lng);
+        }
+
+        function showFullscreenImage(lat, lng) {
+            currentSeasonIndex = 1; // Start with Spring
+            displaySeasonImage(lat, lng);
+            fullscreenImageContainer.style.display = 'flex';
+        }
+
+        function displaySeasonImage(lat, lng) {
+            const season = seasonsOrder[currentSeasonIndex];
+            console.log('Displaying season image for:', season); // Debugging
+            if (imagesData && imagesData[season]) {
+                const imageUrl = `http://127.0.0.1:5000/images/${imagesData[season]}`;
+                console.log('Setting image URL to:', imageUrl); // Debugging
+                fullscreenImage.src = imageUrl;
+                fullscreenImage.alt = `${season} image of ${currentLocation}`;
+            } else {
+                console.error('No image data available for the current season');
+            }
+            updateSeasonButtons();
+        }
+
+        closeFullscreenButton.addEventListener('click', () => {
+            fullscreenImageContainer.style.display = 'none';
+        });
+
+        prevSeasonButton.addEventListener('click', () => {
+            currentSeasonIndex = (currentSeasonIndex - 1 + seasonsOrder.length) % seasonsOrder.length;
+            displaySeasonImage();
+        });
+
+        nextSeasonButton.addEventListener('click', () => {
+            currentSeasonIndex = (currentSeasonIndex + 1) % seasonsOrder.length;
+            displaySeasonImage();
+        });
+
+        function updateSeasonButtons() {
+            prevSeasonButton.textContent = `<${seasonsOrder[(currentSeasonIndex - 1 + seasonsOrder.length) % seasonsOrder.length]}`;
+            nextSeasonButton.textContent = `${seasonsOrder[(currentSeasonIndex + 1) % seasonsOrder.length]}>`;
+        }
+
+        toggleHistoryButton.addEventListener('click', () => {
+            if (sidebar.style.display === 'none' || sidebar.style.display === '') {
+                showHistorySidebar();
+            } else {
+                hideHistorySidebar();
+            }
+        });
+
+        function hideHistorySidebar() {
+            sidebar.style.display = 'none';
+            mainContent.style.marginLeft = '0';
+            mainContent.style.width = '100%';
+            toggleHistoryButton.textContent = 'History';
+        }
+
+        function showHistorySidebar() {
+            sidebar.style.display = 'block';
+            mainContent.style.marginLeft = '250px';
+            mainContent.style.width = 'calc(100% - 250px)';
+            toggleHistoryButton.textContent = '×';
+        }
+
+        // Load history on page load
+        document.addEventListener('DOMContentLoaded', updateHistory);
+
+        // Test the server connection
+        async function testServer() {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/test');
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                console.log('Server test response:', data);
+            } catch (error) {
+                console.error('Error testing server:', error);
+            }
+        }
+
+        testServer();
+
+        function handleGlobeClick(event) {
+            const { lat, lng } = event;
+            const marker = markers.find(m => m.lat === lat && m.lng === lng);
+            if (marker) {
+                showFullscreenImage(lat, lng);
+            }
+        }
+    </script>
+</body>
+</html>
