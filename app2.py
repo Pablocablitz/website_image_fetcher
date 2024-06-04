@@ -17,8 +17,8 @@ from datetime import datetime
 
 # Sentinel Hub configuration
 config = SHConfig()
-config.sh_client_id = '38eaf371-ff5a-4a0e-be00-a23a3d3d8e95'
-config.sh_client_secret = '89QJeKGQ7lnUsYk1nfWdiUPyJoCHd5nm'
+config.sh_client_id = 'YOUR_CLIENT_ID'
+config.sh_client_secret = 'YOUR_CLIENT_SECRET'
 config.sh_base_url = 'https://sh.dataspace.copernicus.eu'
 
 IMAGE_DIR = '/home/eouser/miniconda3/envs/my_ML/Website/images'
@@ -30,7 +30,7 @@ if not os.path.exists(IMAGE_DIR):
 
 def get_bounding_box(location_name):
     """Useful for getting a range of coordinates for a location"""
-    gmaps = googlemaps.Client(key="AIzaSyD7S9rejpC8AQJcV4fzN5NKRncGncdrs8U")
+    gmaps = googlemaps.Client(key="YOUR_API_KEY")
     
     # Get place details
     geocode_result = gmaps.geocode(location_name)
